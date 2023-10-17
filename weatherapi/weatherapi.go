@@ -8,15 +8,18 @@ import (
 	"net/http"
 )
 
+// DailyTemp stores fields of max and min temperature
 type DailyTemp struct {
 	Min float64 `json:"Min"`
 	Max float64 `json:"max"`
 }
 
+// Weather stores field of weather description
 type Weather struct {
 	Desc string `json:"description,omitempty"`
 }
 
+// DailyWeather stores fields of weather features at UnixDt day
 type DailyWeather struct {
 	UnixDt  int64     `json:"dt"`
 	Sunrise int64     `json:"sunrise"`
@@ -26,10 +29,12 @@ type DailyWeather struct {
 	Weather []Weather `json:"weather"`
 }
 
+// Response represents Weather API response of daily forecasts
 type Response struct {
 	Daily []DailyWeather `json:"daily"`
 }
 
+// GetAPIUrl return api url for Weather API
 func GetAPIUrl(cfg *config.Config, lat, lon string) string {
 	return cfg.WeatherAPI.Server +
 		"?lat=" + lat +
@@ -39,6 +44,7 @@ func GetAPIUrl(cfg *config.Config, lat, lon string) string {
 		"&units=" + cfg.WeatherAPI.Units
 }
 
+// GetWeatherForecast fetches API and returns Response - which is weather forecast
 func GetWeatherForecast(apiURL string) (*Response, error) {
 	log.Trace().Str("service", "Weather API").Str("api_url", apiURL).Send()
 

@@ -9,6 +9,7 @@ type telegramCfg struct {
 	Token string `mapstructure:"token"`
 }
 
+// WeatherAPICfg stores values for api requests query params
 type WeatherAPICfg struct {
 	Server  string `mapstructure:"server"`
 	Token   string `mapstructure:"token"`
