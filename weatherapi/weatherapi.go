@@ -34,18 +34,20 @@ type Response struct {
 	Daily []DailyWeather `json:"daily"`
 }
 
-// WeatherService represents a service that interacts with a weather API.
-type WeatherService struct {
-	cfg *config.WeatherAPICfg
-}
-
-// WeatherAPI represents the methods for interacting with a weather API.
+// WeatherAPI represents the methods for interacting with a weather API
 type WeatherAPI interface {
 	GetWeatherForecast(lat, lon string) (*Response, error)
 }
 
-func NewWeatherService(cfg *config.WeatherAPICfg) *WeatherService {
-	return &WeatherService{cfg: cfg}
+// WeatherService represents a service that interacts with a weather API
+type WeatherService struct {
+	cfg *config.WeatherAPICfg
+}
+
+// NewWeatherService initialized new WeatherService instance
+func NewWeatherService(cfg *config.WeatherAPICfg) WeatherAPI {
+	var weatherApi WeatherAPI = &WeatherService{cfg: cfg}
+	return weatherApi
 }
 
 func (wa *WeatherService) getAPIUrl(lat, lon string) string {
