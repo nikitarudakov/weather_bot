@@ -2,6 +2,7 @@ package telebot
 
 import (
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
+	"git.foxminded.ua/foxstudent106092/weather-bot/weatherbotdb"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	tele "gopkg.in/telebot.v3"
@@ -26,7 +27,7 @@ func getDtBtnSlice() []tele.Btn {
 }
 
 // InitTelegramBot initializes Telegram Weather Bot
-func InitTelegramBot(cfg *config.Config) {
+func InitTelegramBot(cfg *config.Config, dbClient *weatherbotdb.WeatherBotClientDb) {
 	pref := tele.Settings{
 		Token:     viper.GetString("telegram.token"),
 		Poller:    &tele.LongPoller{Timeout: 10 * time.Second},
@@ -46,7 +47,26 @@ func InitTelegramBot(cfg *config.Config) {
 	log.Info().Msg("telegram bot was successfully initialized")
 
 	b.Handle("/start", func(c tele.Context) error {
+		if err := insertChatHistoryToDb(c, dbClient, &cfg.Db); err != nil {
+			log.Error().
+				Err(err).
+				Str("service", "dbClient.InsertDocToDbCollection").
+				Msg("failed to insert document")
+		}
+
 		return c.Send("Welcome to <b>Weather Bot</b>!\nUse this bot to see Weather Forecast in your area :)\nJust send <i>location pin</i> to Weather bot and get accurate forecast for up to <b>7 days</b> forward!")
+	})
+
+	b.Handle("/subscribe", func(c tele.Context) error {
+		if err := insertChatHistoryToDb(c, dbClient, &cfg.Db); err != nil {
+			log.Error().
+				Err(err).
+				Str("service", "dbClient.InsertDocToDbCollection").
+				Msg("failed to insert document")
+		}
+
+		return c.Send(`To subscribe for daily weather forecast 
+send time (format: 15:04) you wish to receive it at`)
 	})
 
 	// Create menu with dates starting today and ending on the day 7 days ahead
@@ -62,6 +82,13 @@ func InitTelegramBot(cfg *config.Config) {
 	// --------------------------------------------------------------------------
 
 	b.Handle(tele.OnLocation, func(c tele.Context) error {
+		if err := insertChatHistoryToDb(c, dbClient, &cfg.Db); err != nil {
+			log.Error().
+				Err(err).
+				Str("service", "dbClient.InsertDocToDbCollection").
+				Msg("failed to insert document")
+		}
+
 		err = handleOnLocation(cfg, c)
 		if err != nil {
 			log.Error().Err(err).Msg("error handling on location message request")
@@ -72,6 +99,13 @@ func InitTelegramBot(cfg *config.Config) {
 	})
 
 	b.Handle(&dtBtnSlice[0], func(c tele.Context) error {
+		if err := insertChatHistoryToDb(c, dbClient, &cfg.Db); err != nil {
+			log.Error().
+				Err(err).
+				Str("service", "dbClient.InsertDocToDbCollection").
+				Msg("failed to insert document")
+		}
+
 		err = handleWholePeriodBtn(c)
 		if err != nil {
 			log.Error().Err(err).Msg("error handling on location message request")
@@ -84,6 +118,13 @@ func InitTelegramBot(cfg *config.Config) {
 	for i := 1; i < 8; i++ {
 		dtBtnIndex := i
 		b.Handle(&dtBtnSlice[dtBtnIndex], func(c tele.Context) error {
+			if err := insertChatHistoryToDb(c, dbClient, &cfg.Db); err != nil {
+				log.Error().
+					Err(err).
+					Str("service", "dbClient.InsertDocToDbCollection").
+					Msg("failed to insert document")
+			}
+
 			err = handleDateBtn(c, dtBtnIndex)
 			if err != nil {
 				return err

@@ -9,6 +9,14 @@ type telegramCfg struct {
 	Token string `mapstructure:"token"`
 }
 
+// DbCfg stores values for database connection
+type DbCfg struct {
+	Name              string `mapstructure:"name"`
+	MsgCollectionName string `mapstructure:"messages_collection_name"`
+	ConnectionURL     string `mapstructure:"connection_url"`
+	KeyAPI            string `mapstructure:"key"`
+}
+
 // WeatherAPICfg stores values for api requests query params
 type WeatherAPICfg struct {
 	Server  string `mapstructure:"server"`
@@ -24,6 +32,7 @@ type loggerCfg struct {
 // Config Create private data struct to hold config options.
 type Config struct {
 	Telegram   telegramCfg   `mapstructure:"telegram"`
+	Db         DbCfg         `mapstructure:"db"`
 	WeatherAPI WeatherAPICfg `mapstructure:"weather_api"`
 	Logger     loggerCfg     `mapstructure:"logger"`
 }

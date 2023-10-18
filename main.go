@@ -4,6 +4,7 @@ import (
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
 	"git.foxminded.ua/foxstudent106092/weather-bot/logger"
 	"git.foxminded.ua/foxstudent106092/weather-bot/telebot"
+	"git.foxminded.ua/foxstudent106092/weather-bot/weatherbotdb"
 	"log"
 )
 
@@ -17,6 +18,12 @@ func main() {
 	// initialize logger with config
 	logger.InitLogger(cfg)
 
+	// initialize db with db config
+	dbClient, err := weatherbotdb.NewWeatherBotDbClient(&cfg.Db)
+	if err != nil {
+		panic(err)
+	}
+
 	// initialize telegram bot
-	telebot.InitTelegramBot(cfg)
+	telebot.InitTelegramBot(cfg, dbClient)
 }
