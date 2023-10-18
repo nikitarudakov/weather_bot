@@ -18,7 +18,7 @@ func handleOnLocation(cfg *config.Config, c tele.Context) error {
 		geoutils.FormatCoordinateToString(lat),
 		geoutils.FormatCoordinateToString(lon)
 
-	weatherAPI := weatherapi.NewWeatherService(cfg)
+	weatherAPI := weatherapi.NewWeatherService(&cfg.WeatherAPI)
 
 	weatherForecastAtLocation, err := weatherAPI.GetWeatherForecast(lastLatStored, lastLonStored)
 	if err != nil {
