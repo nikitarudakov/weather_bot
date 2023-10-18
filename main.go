@@ -2,9 +2,9 @@ package main
 
 import (
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
+	"git.foxminded.ua/foxstudent106092/weather-bot/db"
 	"git.foxminded.ua/foxstudent106092/weather-bot/logger"
 	"git.foxminded.ua/foxstudent106092/weather-bot/telebot"
-	"git.foxminded.ua/foxstudent106092/weather-bot/weatherbotdb"
 	"log"
 )
 
@@ -12,17 +12,20 @@ func main() {
 	// parse config to cfg
 	cfg, err := config.GetConfig()
 	if err != nil {
-		log.Fatalf("Fatal error: %s", err)
+		log.Fatalf("fatal error: %s", err)
 	}
 
 	// initialize logger with config
 	logger.InitLogger(cfg)
 
 	// initialize db with db config
-	dbClient, err := weatherbotdb.NewWeatherBotDbClient(&cfg.Db)
+	dbClient, err := db.NewDBClient(&cfg.Db)
 	if err != nil {
-		panic(err)
+		log.Fatalf("fatal error: %s", err)
 	}
+
+	// close connection with db server
+	defer dbClient.CloseConnectionToDB()
 
 	// initialize telegram bot
 	telebot.InitTelegramBot(cfg, dbClient)
