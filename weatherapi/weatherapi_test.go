@@ -35,14 +35,14 @@ func TestWeatherAPI(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
 
-			apiURL := GetAPIUrl(cfg, latStr, lonStr)
+			weatherAPI := NewWeatherService(&cfg.WeatherAPI)
 
-			weatherForecast, err := GetWeatherForecast(apiURL)
+			weatherForecastAtLocation, err := weatherAPI.GetWeatherForecast(latStr, lonStr)
 			if err != nil {
 				t.Error(err)
 			}
 
-			t.Log(fmt.Sprintf("%+v\n", *weatherForecast))
+			t.Log(fmt.Sprintf("%+v\n", *weatherForecastAtLocation))
 		})
 	}
 }

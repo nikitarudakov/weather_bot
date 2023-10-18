@@ -34,19 +34,33 @@ type Response struct {
 	Daily []DailyWeather `json:"daily"`
 }
 
-// GetAPIUrl return api url for Weather API
-func GetAPIUrl(cfg *config.Config, lat, lon string) string {
-	return cfg.WeatherAPI.Server +
+// WeatherService represents a service that interacts with a weather API.
+type WeatherService struct {
+	cfg *config.WeatherAPICfg
+}
+
+// WeatherAPI represents the methods for interacting with a weather API.
+type WeatherAPI interface {
+	GetWeatherForecast(lat, lon string) (*Response, error)
+}
+
+func NewWeatherService(cfg *config.WeatherAPICfg) *WeatherService {
+	return &WeatherService{cfg: cfg}
+}
+
+func (wa *WeatherService) getAPIUrl(lat, lon string) string {
+	return wa.cfg.Server +
 		"?lat=" + lat +
 		"&lon=" + lon +
-		"&appid=" + cfg.WeatherAPI.Token +
-		"&exclude=" + cfg.WeatherAPI.Exclude +
-		"&units=" + cfg.WeatherAPI.Units
+		"&appid=" + wa.cfg.Token +
+		"&exclude=" + wa.cfg.Exclude +
+		"&units=" + wa.cfg.Units
 }
 
 // GetWeatherForecast fetches API and returns Response - which is weather forecast
-func GetWeatherForecast(apiURL string) (*Response, error) {
-	log.Trace().Str("service", "Weather API").Str("api_url", apiURL).Send()
+func (wa *WeatherService) GetWeatherForecast(lat, lon string) (*Response, error) {
+	// Get API url for location coords lat/lon
+	apiURL := wa.getAPIUrl(lat, lon)
 
 	resp, err := http.Get(apiURL)
 	if err != nil {
