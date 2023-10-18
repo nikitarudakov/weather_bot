@@ -2,50 +2,27 @@ package telebot
 
 import (
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
-	"git.foxminded.ua/foxstudent106092/weather-bot/utils/geoutils"
-	"git.foxminded.ua/foxstudent106092/weather-bot/weatherapi"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	tele "gopkg.in/telebot.v3"
-	"strings"
 	"time"
 )
 
 var menu = &tele.ReplyMarkup{ResizeKeyboard: true}
-var lastLatStored, lastLonStored string
-var weatherForecast *weatherapi.Response
 
 func getDtBtnSlice() []tele.Btn {
-	var dtBtnSlice []tele.Btn
+	dtBtnSlice := make([]tele.Btn, 8)
 
-	dtBtnSlice = append(dtBtnSlice, menu.Text("All 7 days"))
+	dtBtnSlice[0] = menu.Text("All 7 days")
 
 	dtToday := time.Now()
 
 	for dayPlus := 0; dayPlus < 7; dayPlus++ {
 		dtStr := dtToday.AddDate(0, 0, dayPlus).Format("02/01/2006")
-		dtBtnSlice = append(dtBtnSlice, menu.Text(dtStr))
+		dtBtnSlice[dayPlus+1] = menu.Text(dtStr)
 	}
 
 	return dtBtnSlice
-}
-
-// HandleDtBtn initialize handler for menu btn
-// that send back weather forecast on specified date
-func HandleDtBtn(b *tele.Bot, dtBtnSlice []tele.Btn, dtBtnIndex int) {
-	b.Handle(&dtBtnSlice[dtBtnIndex], func(c tele.Context) error {
-		if weatherForecast == nil {
-			return c.Send("Data is unavailable!\nSend location pin")
-		}
-		weatherTextMsg, err := weatherForecast.Daily[dtBtnIndex-1].FormatToTextMsg()
-		if err != nil {
-			log.Warn().
-				Str("service", "FormatToTextMsg").
-				Err(err).
-				Msg("Warning! Forecast could not be formatted to text message")
-		}
-		return c.Send(weatherTextMsg)
-	})
 }
 
 // InitTelegramBot initializes Telegram Weather Bot
@@ -85,50 +62,35 @@ func InitTelegramBot(cfg *config.Config) {
 	// --------------------------------------------------------------------------
 
 	b.Handle(tele.OnLocation, func(c tele.Context) error {
-		lat, lon := c.Message().Location.Lat, c.Message().Location.Lng
-		lastLatStored, lastLonStored =
-			geoutils.FormatCoordinateToString(lat),
-			geoutils.FormatCoordinateToString(lon)
-
-		apiURL := weatherapi.GetAPIUrl(cfg, lastLatStored, lastLonStored)
-
-		weatherForecast, err = weatherapi.GetWeatherForecast(apiURL)
+		err = handleOnLocation(cfg, c)
 		if err != nil {
-			log.Error().
-				Str("service", "GetWeatherForecast").
-				Err(err).
-				Msg("failed to get weather forecast")
-
-			return c.Send("Data is unavailable for this location!")
+			log.Error().Err(err).Msg("error handling on location message request")
+			return err
 		}
 
-		return c.Send("Choose time period to get forecast:", menu)
+		return nil
 	})
 
 	b.Handle(&dtBtnSlice[0], func(c tele.Context) error {
-		if weatherForecast == nil {
-			return c.Send("Data is unavailable!\nSend location pin")
+		err = handleWholePeriodBtn(c)
+		if err != nil {
+			log.Error().Err(err).Msg("error handling on location message request")
+			return err
 		}
 
-		var dailyWeatherBuilder strings.Builder
-		for _, dailyWeather := range weatherForecast.Daily {
-			weatherTextMsg, err := dailyWeather.FormatToTextMsg()
-			if err != nil {
-				log.Warn().
-					Str("service", "FormatToTextMsg").
-					Err(err).
-					Msg("Warning! Forecast could not be formatted to text message")
-			}
-
-			dailyWeatherBuilder.WriteString(weatherTextMsg)
-			dailyWeatherBuilder.WriteString("\n")
-		}
-
-		return c.Send(dailyWeatherBuilder.String())
+		return nil
 	})
 
 	for i := 1; i < 8; i++ {
-		HandleDtBtn(b, dtBtnSlice, i)
+		dtBtnIndex := i
+		b.Handle(&dtBtnSlice[dtBtnIndex], func(c tele.Context) error {
+			err = handleDateBtn(c, dtBtnIndex)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		})
 	}
 
 	b.Start()
