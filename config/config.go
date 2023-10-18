@@ -9,12 +9,11 @@ type telegramCfg struct {
 	Token string `mapstructure:"token"`
 }
 
-// DbCfg stores values for database connection
+// DbCfg stores values for db connection
 type DbCfg struct {
-	Name              string `mapstructure:"name"`
-	MsgCollectionName string `mapstructure:"messages_collection_name"`
-	ConnectionURL     string `mapstructure:"connection_url"`
-	KeyAPI            string `mapstructure:"key"`
+	Name               string `mapstructure:"name"`
+	SubsCollectionName string `mapstructure:"subscription_collection_name"`
+	ConnectionURL      string `mapstructure:"connection_url"`
 }
 
 // WeatherAPICfg stores values for api requests query params
@@ -44,7 +43,7 @@ func GetConfig() (*Config, error) {
 	viper.AddConfigPath(".")
 	viper.AddConfigPath("..")
 
-	// Read config
+	// read config
 	if err := viper.ReadInConfig(); err != nil {
 		log.Println("config could not be loaded, ERROR")
 		return nil, err
@@ -52,7 +51,7 @@ func GetConfig() (*Config, error) {
 
 	cfg := &Config{}
 
-	// Parse config to struct
+	// parse config to struct
 	if err := viper.Unmarshal(cfg); err != nil {
 		log.Println("config could not be parsed, ERROR")
 		return nil, err
