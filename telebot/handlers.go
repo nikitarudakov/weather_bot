@@ -2,38 +2,22 @@ package telebot
 
 import (
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
+	"git.foxminded.ua/foxstudent106092/weather-bot/db"
 	"git.foxminded.ua/foxstudent106092/weather-bot/utils/geoutils"
 	"git.foxminded.ua/foxstudent106092/weather-bot/weatherapi"
-	"git.foxminded.ua/foxstudent106092/weather-bot/weatherbotdb"
 	"github.com/rs/zerolog/log"
 	tele "gopkg.in/telebot.v3"
 	"strings"
-	"time"
 )
 
-var lastLatStored, lastLonStored string
-var weatherForecast *weatherapi.Response
-
-type StoredMessages struct {
-	Timestamp int64 `bson:"timestamp"`
-	MessageID int   `bson:"message_id"`
-	ChatID    int64 `bson:"chat_id"`
-	IsCommand bool  `bson:"is_command"`
-}
-
-func insertChatHistoryToDb(
+func handleSubscriptionDataInsertionToDB(
 	c tele.Context,
-	dbClient *weatherbotdb.WeatherBotClientDb,
-	cfgDb *config.DbCfg,
+	dbClient db.DatabaseAccessor,
+	status int8,
 ) error {
-	doc := StoredMessages{
-		Timestamp: time.Now().Unix(),
-		MessageID: c.Message().ID,
-		ChatID:    c.Chat().ID,
-		IsCommand: true,
-	}
+	doc := db.NewSubscriptionData(c, status)
 
-	if err := dbClient.InsertDocToDbCollection(doc, cfgDb.MsgCollectionName); err != nil {
+	if err := dbClient.InsertSubscriptionDataToDB(doc); err != nil {
 		return err
 	}
 
@@ -50,10 +34,7 @@ func handleOnLocation(cfg *config.Config, c tele.Context) error {
 
 	weatherForecastAtLocation, err := weatherAPI.GetWeatherForecast(lastLatStored, lastLonStored)
 	if err != nil {
-		log.Error().
-			Str("service", "GetWeatherForecast").
-			Err(err).
-			Msg("failed to get weather forecast")
+		log.Error().Err(err).Send()
 
 		return c.Send("Data is unavailable for this location!")
 	}
@@ -72,10 +53,7 @@ func handleWholePeriodBtn(c tele.Context) error {
 	for _, dailyWeather := range weatherForecast.Daily {
 		weatherTextMsg, err := dailyWeather.FormatToTextMsg()
 		if err != nil {
-			log.Warn().
-				Str("service", "FormatToTextMsg").
-				Err(err).
-				Msg("Warning! Forecast could not be formatted to text message")
+			log.Warn().Err(err).Send()
 		}
 
 		dailyWeatherBuilder.WriteString(weatherTextMsg)
@@ -92,10 +70,7 @@ func handleDateBtn(c tele.Context, dtBtnIndex int) error {
 
 	weatherTextMsg, err := weatherForecast.Daily[dtBtnIndex-1].FormatToTextMsg()
 	if err != nil {
-		log.Warn().
-			Str("service", "FormatToTextMsg").
-			Err(err).
-			Msg("Warning! Forecast could not be formatted to text message")
+		log.Warn().Err(err).Send()
 	}
 
 	return c.Send(weatherTextMsg)
