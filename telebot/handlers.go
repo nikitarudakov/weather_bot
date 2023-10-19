@@ -2,27 +2,12 @@ package telebot
 
 import (
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
-	"git.foxminded.ua/foxstudent106092/weather-bot/db"
 	"git.foxminded.ua/foxstudent106092/weather-bot/utils/geoutils"
 	"git.foxminded.ua/foxstudent106092/weather-bot/weatherapi"
 	"github.com/rs/zerolog/log"
 	tele "gopkg.in/telebot.v3"
 	"strings"
 )
-
-func handleSubscriptionDataInsertionToDB(
-	c tele.Context,
-	dbClient db.DatabaseAccessor,
-	status int8,
-) error {
-	doc := db.NewSubscriptionData(c, status)
-
-	if err := dbClient.InsertSubscriptionDataToDB(doc); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 func handleOnLocation(cfg *config.Config, c tele.Context) error {
 	lat, lon := c.Message().Location.Lat, c.Message().Location.Lng
