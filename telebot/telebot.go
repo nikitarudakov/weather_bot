@@ -1,8 +1,10 @@
 package telebot
 
 import (
+	"fmt"
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
 	"git.foxminded.ua/foxstudent106092/weather-bot/db"
+	"git.foxminded.ua/foxstudent106092/weather-bot/utils/timeutils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	tele "gopkg.in/telebot.v3"
@@ -36,19 +38,33 @@ Just send <i>location pin</i> to Weather bot and get accurate forecast for up to
 
 	// handles event triggered by subscribe command
 	b.Handle("/subscribe", func(c tele.Context) error {
-		if err = handleSubscriptionDataInsertionToDB(c, dbClient, 1); err != nil {
-			log.Error().Err(err).Send()
+		subscriptionService := NewSubscriptionService(c.Sender().ID, "", false)
 
+		if err = subscriptionService.RequestSubscription(dbClient); err != nil {
 			return err
 		}
 
-		return c.Send(`To subscribe for daily weather forecast 
-send time (format: 15:04) you wish to receive it at`)
+		return c.Send(`Send time in 24h (15:04) format to finish subscription`)
 	})
 
-	// handles event triggered by any sent text
+	// handles event triggered by any sent text after subscribe cmd was triggered
 	b.Handle(tele.OnText, func(c tele.Context) error {
-		return nil
+		_, err = timeutils.ParseTimeFormat(c.Message().Text)
+		if err != nil {
+			return c.Send("Time format is invalid or unsupported, try again with different format")
+		}
+
+		subscriptionService := NewSubscriptionService(c.Sender().ID, c.Message().Text, true)
+
+		if err = subscriptionService.CheckSubscription(dbClient); err != nil {
+			return c.Send("Send subscribe command first!")
+		}
+
+		if err = subscriptionService.UpdateSubscription(dbClient); err != nil {
+			return c.Send("Subscription was unsuccessful")
+		}
+
+		return c.Send(fmt.Sprintf("You were subscribed for time %s", c.Message().Text))
 	})
 
 	// create menu with dates starting today and ending on the day 7 days ahead
