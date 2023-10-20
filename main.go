@@ -19,7 +19,7 @@ func main() {
 	logger.InitLogger(cfg)
 
 	// initialize db with db config
-	dbClient, err := db.NewDBClient(&cfg.Db)
+	dbClient, err := db.NewDatabaseClient(&cfg.Db)
 	if err != nil {
 		log.Fatalf("fatal error: %s", err)
 	}

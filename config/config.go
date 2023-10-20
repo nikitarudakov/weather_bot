@@ -5,15 +5,16 @@ import (
 	"log"
 )
 
-type telegramCfg struct {
+type TelegramCfg struct {
 	Token string `mapstructure:"token"`
 }
 
 // DbCfg stores values for db connection
 type DbCfg struct {
-	Name               string `mapstructure:"name"`
-	SubsCollectionName string `mapstructure:"subscription_collection_name"`
-	ConnectionURL      string `mapstructure:"connection_url"`
+	Name                   string `mapstructure:"name"`
+	SubsCollectionName     string `mapstructure:"subscription_collection_name"`
+	ForecastCollectionName string `mapstructure:"forecast_collection_name"`
+	ConnectionURL          string `mapstructure:"connection_url"`
 }
 
 // WeatherAPICfg stores values for api requests query params
@@ -30,7 +31,7 @@ type loggerCfg struct {
 
 // Config Create private data struct to hold config options.
 type Config struct {
-	Telegram   telegramCfg   `mapstructure:"telegram"`
+	Telegram   TelegramCfg   `mapstructure:"telegram"`
 	Db         DbCfg         `mapstructure:"db"`
 	WeatherAPI WeatherAPICfg `mapstructure:"weather_api"`
 	Logger     loggerCfg     `mapstructure:"logger"`
