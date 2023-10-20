@@ -11,7 +11,7 @@ var menu = &tele.ReplyMarkup{ResizeKeyboard: true}
 var lastLatStored, lastLonStored string
 var weatherForecast *weatherapi.Response
 
-func getDtBtnSlice() []tele.Btn {
+func getMenuDateBtnSlice() []tele.Btn {
 	dtBtnSlice := make([]tele.Btn, 8)
 
 	dtBtnSlice[0] = menu.Text("All 7 days")

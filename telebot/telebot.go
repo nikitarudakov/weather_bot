@@ -1,10 +1,8 @@
 package telebot
 
 import (
-	"fmt"
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
 	"git.foxminded.ua/foxstudent106092/weather-bot/db"
-	"git.foxminded.ua/foxstudent106092/weather-bot/utils/timeutils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	tele "gopkg.in/telebot.v3"
@@ -23,95 +21,53 @@ func InitTelegramBot(cfg *config.Config, dbClient db.DatabaseAccessor) {
 	b, err := tele.NewBot(pref)
 	if err != nil {
 		log.Error().Err(err).Send()
-
 		return
 	}
 
-	log.Info().Msg("Telegram bot was successfully initialized")
+	// create menu with dates starting today and ending on the day 7 days ahead
+	menuDateBtnSlice := getMenuDateBtnSlice()
+
+	menu.Reply(
+		menu.Row(menuDateBtnSlice[0]),
+		menu.Row(menuDateBtnSlice[1], menuDateBtnSlice[2]),
+		menu.Row(menuDateBtnSlice[3], menuDateBtnSlice[4]),
+		menu.Row(menuDateBtnSlice[5], menuDateBtnSlice[6]),
+		menu.Row(menuDateBtnSlice[7]),
+	)
 
 	// handles event triggered by start command
-	b.Handle("/start", func(c tele.Context) error {
-		return c.Send(`Welcome to <b>Weather Bot</b>!
-Use this bot to see Weather Forecast in your area :)
-Just send <i>location pin</i> to Weather bot and get accurate forecast for up to <b>7 days</b> forward!`)
+	b.Handle("/start", func(context tele.Context) error {
+		return handleStartCmd(context)
 	})
 
 	// handles event triggered by subscribe command
-	b.Handle("/subscribe", func(c tele.Context) error {
-		subscriptionService := NewSubscriptionService(c.Sender().ID, "", false)
-
-		if err = subscriptionService.RequestSubscription(dbClient); err != nil {
-			return err
-		}
-
-		return c.Send(`Send time in 24h (15:04) format to finish subscription`)
+	b.Handle("/subscribe", func(context tele.Context) error {
+		return handleSubscriptionCmd(context, dbClient)
 	})
 
 	// handles event triggered by any sent text after subscribe cmd was triggered
-	b.Handle(tele.OnText, func(c tele.Context) error {
-		_, err = timeutils.ParseTimeFormat(c.Message().Text)
-		if err != nil {
-			return c.Send("Time format is invalid or unsupported, try again with different format")
-		}
-
-		subscriptionService := NewSubscriptionService(c.Sender().ID, c.Message().Text, true)
-
-		if err = subscriptionService.CheckSubscription(dbClient); err != nil {
-			return c.Send("Send subscribe command first!")
-		}
-
-		if err = subscriptionService.UpdateSubscription(dbClient); err != nil {
-			return c.Send("Subscription was unsuccessful")
-		}
-
-		return c.Send(fmt.Sprintf("You were subscribed for time %s", c.Message().Text))
+	b.Handle(tele.OnText, func(context tele.Context) error {
+		return handleTimeMessageForSubscription(context, dbClient)
 	})
 
-	// create menu with dates starting today and ending on the day 7 days ahead
-	dtBtnSlice := getDtBtnSlice()
-
-	menu.Reply(
-		menu.Row(dtBtnSlice[0]),
-		menu.Row(dtBtnSlice[1], dtBtnSlice[2]),
-		menu.Row(dtBtnSlice[3], dtBtnSlice[4]),
-		menu.Row(dtBtnSlice[5], dtBtnSlice[6]),
-		menu.Row(dtBtnSlice[7]),
-	)
-
 	// handles event triggered when Location Pin is sent
-	b.Handle(tele.OnLocation, func(c tele.Context) error {
-		err = handleOnLocation(cfg, c)
-		if err != nil {
-			log.Error().Err(err).Send()
-			return err
-		}
-
-		return nil
+	b.Handle(tele.OnLocation, func(context tele.Context) error {
+		return handleLocationPinMessage(context, cfg)
 	})
 
 	// handles event triggered when whole period btn is pressed on menu
-	b.Handle(&dtBtnSlice[0], func(c tele.Context) error {
-		err = handleWholePeriodBtn(c)
-		if err != nil {
-			log.Error().Err(err).Send()
-			return err
-		}
-
-		return nil
+	b.Handle(&menuDateBtnSlice[0], func(context tele.Context) error {
+		return handleDateWholePeriodBtn(context)
 	})
 
 	// handles event triggered when day btn is pressed on menu
-	for i := 1; i < 8; i++ {
-		dtBtnIndex := i
-		b.Handle(&dtBtnSlice[dtBtnIndex], func(c tele.Context) error {
-			err = handleDateBtn(c, dtBtnIndex)
-			if err != nil {
-				return err
-			}
-
-			return nil
+	for dtBtnIndex := 1; dtBtnIndex < 8; dtBtnIndex++ {
+		b.Handle(&menuDateBtnSlice[dtBtnIndex], func(context tele.Context) error {
+			return handleDateBtn(context, dtBtnIndex)
 		})
 	}
 
 	b.Start()
+
+	log.Info().Msg("Telegram bot is running ...")
 }
