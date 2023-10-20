@@ -4,9 +4,15 @@ import (
 	"git.foxminded.ua/foxstudent106092/weather-bot/db"
 )
 
+type Location struct {
+	Lat float64 `bson:"lat"`
+	Lon float64 `bson:"lon"`
+}
+
 // SubscriptionEvent stores time to send forecast at
 type SubscriptionEvent struct {
-	recurringTime string `bson:"time"`
+	RecurringTime string   `bson:"time"`
+	Location      Location `bson:"location"`
 }
 
 // SubscriptionService stores userID and subscription event
@@ -17,22 +23,27 @@ type SubscriptionService struct {
 }
 
 type SubscriptionManager interface {
-	CheckSubscription(dbClient db.DatabaseAccessor) error
+	CheckSubscriptionExist(dbClient db.DatabaseAccessor) error
 	RequestSubscription(dbClient db.DatabaseAccessor) error
 	UpdateSubscription(dbClient db.DatabaseAccessor) error
 }
 
-func NewSubscriptionService(userID int64, time string, processed bool) SubscriptionManager {
+func NewSubscriptionService(userID int64, time string, processed bool, loc Location) SubscriptionManager {
+	subscriptionEvent := SubscriptionEvent{
+		time,
+		loc,
+	}
+
 	var subService SubscriptionManager = &SubscriptionService{
 		UserID:    userID,
-		Event:     SubscriptionEvent{time},
+		Event:     subscriptionEvent,
 		Processed: processed,
 	}
 
 	return subService
 }
 
-func (subService *SubscriptionService) CheckSubscription(dbClient db.DatabaseAccessor) error {
+func (subService *SubscriptionService) CheckSubscriptionExist(dbClient db.DatabaseAccessor) error {
 	if err := dbClient.FindItemInDb(subService.UserID); err != nil {
 		return err
 	}
@@ -41,6 +52,10 @@ func (subService *SubscriptionService) CheckSubscription(dbClient db.DatabaseAcc
 }
 
 func (subService *SubscriptionService) RequestSubscription(dbClient db.DatabaseAccessor) error {
+	if err := subService.CheckSubscriptionExist(dbClient); err == nil {
+		return nil
+	}
+
 	if err := dbClient.InsertItemToDB(subService); err != nil {
 		return err
 	}
@@ -49,7 +64,7 @@ func (subService *SubscriptionService) RequestSubscription(dbClient db.DatabaseA
 }
 
 func (subService *SubscriptionService) UpdateSubscription(dbClient db.DatabaseAccessor) error {
-	if err := dbClient.UpdateItemInDb(subService.UserID, subService.Event.recurringTime, subService.Processed); err != nil {
+	if err := dbClient.UpdateItemInDb(subService.UserID, subService.Event.RecurringTime, subService.Processed); err != nil {
 		return err
 	}
 
