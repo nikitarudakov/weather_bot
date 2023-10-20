@@ -19,18 +19,19 @@ type DatabaseClient struct {
 
 // DatabaseAccessor represents the methods for interacting with a bot db
 type DatabaseAccessor interface {
-	InsertItemToDB(doc interface{}) error
-	FindItemInDb(userID int64) error
-	UpdateItemInDb(userID int64, recurringTime string, processed bool) error
+	InsertItemToDB(doc interface{}, collectionName string) error
+	FindUserInDB(userID int64, collectionName string) *mongo.SingleResult
+	UpdateItemInDB(userID int64, update bson.M) error
 	CloseConnectionToDB() error
+	FindItemsInDB(filter bson.D) (*mongo.Cursor, error)
 }
 
-func NewDatabaseClient(cfg *config.DbCfg) DatabaseAccessor {
+func NewDatabaseClient(cfg *config.DbCfg) (DatabaseAccessor, error) {
 	client, err := connectToDB(cfg)
 
 	if err != nil {
 		log.Error().Err(err).Send()
-		return nil
+		return nil, err
 	}
 
 	var databaseClient DatabaseAccessor = &DatabaseClient{
@@ -38,19 +39,23 @@ func NewDatabaseClient(cfg *config.DbCfg) DatabaseAccessor {
 		client: client,
 	}
 
-	return databaseClient
+	return databaseClient, nil
 }
 
-// UpdateItemInDb TODO refactor passing update arguments
-func (dc *DatabaseClient) UpdateItemInDb(userID int64, recurringTime string, processed bool) error {
+func (dc *DatabaseClient) FindItemsInDB(filter bson.D) (*mongo.Cursor, error) {
+	collection := dc.client.Database(dc.cfg.Name).Collection(dc.cfg.SubsCollectionName)
+
+	cursor, err := collection.Find(context.TODO(), filter)
+	if err != nil {
+		return nil, err
+	}
+
+	return cursor, nil
+}
+
+func (dc *DatabaseClient) UpdateItemInDB(userID int64, update bson.M) error {
 	collection := dc.client.Database(dc.cfg.Name).Collection(dc.cfg.SubsCollectionName)
 	filter := bson.D{{"user_id", userID}}
-	update := bson.M{
-		"$set": bson.M{
-			"processed":  processed,
-			"event.time": recurringTime,
-		},
-	}
 
 	_, err := collection.UpdateOne(context.TODO(), filter, update)
 	if err != nil {
@@ -60,20 +65,15 @@ func (dc *DatabaseClient) UpdateItemInDb(userID int64, recurringTime string, pro
 	return nil
 }
 
-func (dc *DatabaseClient) FindItemInDb(userID int64) error {
-	collection := dc.client.Database(dc.cfg.Name).Collection(dc.cfg.SubsCollectionName)
+func (dc *DatabaseClient) FindUserInDB(userID int64, collectionName string) *mongo.SingleResult {
+	collection := dc.client.Database(dc.cfg.Name).Collection(collectionName)
 	filter := bson.D{{"user_id", userID}}
 
-	var subscriptionData interface{}
-	if err := collection.FindOne(context.TODO(), filter).Decode(&subscriptionData); err != nil {
-		return err
-	}
-
-	return nil
+	return collection.FindOne(context.TODO(), filter)
 }
 
-func (dc *DatabaseClient) InsertItemToDB(doc interface{}) error {
-	collection := dc.client.Database(dc.cfg.Name).Collection(dc.cfg.SubsCollectionName)
+func (dc *DatabaseClient) InsertItemToDB(doc interface{}, collectionName string) error {
+	collection := dc.client.Database(dc.cfg.Name).Collection(collectionName)
 
 	if collection == nil {
 		err := errors.New(

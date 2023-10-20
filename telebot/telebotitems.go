@@ -1,15 +1,11 @@
 package telebot
 
 import (
-	"git.foxminded.ua/foxstudent106092/weather-bot/weatherapi"
 	tele "gopkg.in/telebot.v3"
 	"time"
 )
 
 var menu = &tele.ReplyMarkup{ResizeKeyboard: true}
-
-var lastLatStored, lastLonStored string
-var weatherForecast *weatherapi.Response
 
 func getMenuDateBtnSlice() []tele.Btn {
 	dtBtnSlice := make([]tele.Btn, 8)

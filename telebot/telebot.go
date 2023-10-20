@@ -3,6 +3,7 @@ package telebot
 import (
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
 	"git.foxminded.ua/foxstudent106092/weather-bot/db"
+	"git.foxminded.ua/foxstudent106092/weather-bot/weatherapi"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	tele "gopkg.in/telebot.v3"
@@ -24,6 +25,12 @@ func InitTelegramBot(cfg *config.Config, dbClient db.DatabaseAccessor) {
 		return
 	}
 
+	weatherAPI := weatherapi.NewWeatherAPIService(&cfg.WeatherAPI)
+
+	// Set goroutine to check for incoming subscriptions
+	ticker := time.NewTicker(1 * time.Minute)
+	go RecurrentWeatherForecast(b, ticker, dbClient, &cfg.Db, weatherAPI)
+
 	// create menu with dates starting today and ending on the day 7 days ahead
 	menuDateBtnSlice := getMenuDateBtnSlice()
 
@@ -42,28 +49,28 @@ func InitTelegramBot(cfg *config.Config, dbClient db.DatabaseAccessor) {
 
 	// handles event triggered by subscribe command
 	b.Handle("/subscribe", func(context tele.Context) error {
-		return handleSubscriptionCmd(context, dbClient)
+		return handleSubscriptionCmd(context, dbClient, &cfg.Db)
 	})
 
 	// handles event triggered by any sent text after subscribe cmd was triggered
 	b.Handle(tele.OnText, func(context tele.Context) error {
-		return handleTimeMessageForSubscription(context, dbClient)
+		return handleTimeMessageForSubscription(context, dbClient, cfg)
 	})
 
 	// handles event triggered when Location Pin is sent
 	b.Handle(tele.OnLocation, func(context tele.Context) error {
-		return handleLocationPinMessage(context, cfg)
+		return handleLocationPinMessage(context, cfg, dbClient, weatherAPI)
 	})
 
 	// handles event triggered when whole period btn is pressed on menu
 	b.Handle(&menuDateBtnSlice[0], func(context tele.Context) error {
-		return handleDateWholePeriodBtn(context)
+		return handleDateWholePeriodBtn(context, dbClient, cfg, weatherAPI)
 	})
 
 	// handles event triggered when day btn is pressed on menu
 	for dtBtnIndex := 1; dtBtnIndex < 8; dtBtnIndex++ {
 		b.Handle(&menuDateBtnSlice[dtBtnIndex], func(context tele.Context) error {
-			return handleDateBtn(context, dtBtnIndex)
+			return handleDateBtn(context, dbClient, cfg, weatherAPI, dtBtnIndex)
 		})
 	}
 

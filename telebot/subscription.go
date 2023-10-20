@@ -1,12 +1,17 @@
 package telebot
 
 import (
+	"context"
+	"git.foxminded.ua/foxstudent106092/weather-bot/config"
 	"git.foxminded.ua/foxstudent106092/weather-bot/db"
+	"github.com/rs/zerolog/log"
+	"go.mongodb.org/mongo-driver/bson"
+	tele "gopkg.in/telebot.v3"
 )
 
 type Location struct {
-	Lat float64 `bson:"lat"`
-	Lon float64 `bson:"lon"`
+	Lat float32 `bson:"lat"`
+	Lon float32 `bson:"lon"`
 }
 
 // SubscriptionEvent stores time to send forecast at
@@ -18,53 +23,74 @@ type SubscriptionEvent struct {
 // SubscriptionService stores userID and subscription event
 type SubscriptionService struct {
 	UserID    int64             `bson:"user_id"`
+	UserObj   tele.User         `bson:"user"`
 	Event     SubscriptionEvent `bson:"event"`
 	Processed bool              `bson:"processed"`
 }
 
-type SubscriptionManager interface {
-	CheckSubscriptionExist(dbClient db.DatabaseAccessor) error
-	RequestSubscription(dbClient db.DatabaseAccessor) error
-	UpdateSubscription(dbClient db.DatabaseAccessor) error
-}
+func FindProcessedSubscriptions(dbClient db.DatabaseAccessor) []SubscriptionService {
+	filter := bson.D{{"processed", true}}
 
-func NewSubscriptionService(userID int64, time string, processed bool, loc Location) SubscriptionManager {
-	subscriptionEvent := SubscriptionEvent{
-		time,
-		loc,
-	}
-
-	var subService SubscriptionManager = &SubscriptionService{
-		UserID:    userID,
-		Event:     subscriptionEvent,
-		Processed: processed,
-	}
-
-	return subService
-}
-
-func (subService *SubscriptionService) CheckSubscriptionExist(dbClient db.DatabaseAccessor) error {
-	if err := dbClient.FindItemInDb(subService.UserID); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (subService *SubscriptionService) RequestSubscription(dbClient db.DatabaseAccessor) error {
-	if err := subService.CheckSubscriptionExist(dbClient); err == nil {
+	var results []SubscriptionService
+	cursor, err := dbClient.FindItemsInDB(filter)
+	if err = cursor.All(context.TODO(), &results); err != nil {
+		log.Warn().Err(err).Send()
 		return nil
 	}
 
-	if err := dbClient.InsertItemToDB(subService); err != nil {
+	return results
+}
+
+func CheckSubscriptionExist(dbClient db.DatabaseAccessor, dbCfg *config.DbCfg, userID int64) (*SubscriptionService, error) {
+	var subService SubscriptionService
+	if err := dbClient.FindUserInDB(userID, dbCfg.SubsCollectionName).Decode(&subService); err != nil {
+		return nil, err
+	}
+
+	return &subService, nil
+}
+
+func RequestSubscription(dbClient db.DatabaseAccessor, dbCfg *config.DbCfg, userID int64, userOBJ tele.User) error {
+	subscriptionService, err := CheckSubscriptionExist(dbClient, dbCfg, userID)
+	if err == nil && !subscriptionService.Processed {
+		return nil
+	}
+
+	subService := &SubscriptionService{
+		UserID:    userID,
+		UserObj:   userOBJ,
+		Event:     SubscriptionEvent{},
+		Processed: false,
+	}
+
+	if err == nil && subscriptionService.Processed {
+		update := bson.M{
+			"$set": bson.M{
+				"event":     SubscriptionEvent{},
+				"processed": false,
+			},
+		}
+
+		if err = dbClient.UpdateItemInDB(userID, update); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	if err = dbClient.InsertItemToDB(subService, dbCfg.SubsCollectionName); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (subService *SubscriptionService) UpdateSubscription(dbClient db.DatabaseAccessor) error {
-	if err := dbClient.UpdateItemInDb(subService.UserID, subService.Event.RecurringTime, subService.Processed); err != nil {
+func UpdateSubscription(dbClient db.DatabaseAccessor, userID int64, updateBsonObj bson.M) error {
+	update := bson.M{
+		"$set": updateBsonObj,
+	}
+
+	if err := dbClient.UpdateItemInDB(userID, update); err != nil {
 		return err
 	}
 
