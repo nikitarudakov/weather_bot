@@ -21,12 +21,10 @@ func sendErrorMsgWithBot(b *tele.Bot, subService *SubscriptionService, err error
 	}
 }
 
-func HandleWeatherForecastSubscription(
+func handleWeatherForecastSubscription(
 	b *tele.Bot,
-	dbClient db.DatabaseAccessor,
 	subService SubscriptionService,
 	weatherAPI weatherapi.WeatherAPI,
-	dbCfg *config.DbCfg,
 ) {
 	lat, lon := subService.Event.Location.Lat, subService.Event.Location.Lon
 
@@ -39,22 +37,21 @@ func HandleWeatherForecastSubscription(
 		sendErrorMsgWithBot(b, &subService, err)
 	}
 
-	if err = weatherForecast.StoreWeatherForecastForUser(dbClient, dbCfg, subService.UserID); err != nil {
-		sendErrorMsgWithBot(b, &subService, err)
+	weatherTextMsg, err := weatherForecast.Daily[0].FormatToTextMsg()
+	if err != nil {
+		log.Warn().Err(err).Send()
 	}
 
-	msg := "Weather forecast is ready for you, just click date button in menu"
-	_, err = b.Send(&subService.UserObj, msg, menu)
+	_, err = b.Send(&subService.UserObj, weatherTextMsg)
 	if err != nil {
 		sendErrorMsgWithBot(b, &subService, err)
 	}
 }
 
-func RecurrentWeatherForecast(
+func recurrentWeatherForecast(
 	b *tele.Bot,
 	ticker *time.Ticker,
 	dbClient db.DatabaseAccessor,
-	dbCfg *config.DbCfg,
 	weatherAPI weatherapi.WeatherAPI) {
 
 	for t := range ticker.C {
@@ -64,9 +61,8 @@ func RecurrentWeatherForecast(
 
 		for _, subscriptionService := range subscriptions {
 			isRecurrentTime := subscriptionService.Event.RecurringTime == tickerTimeUTCFormatted
-
 			if subscriptionService.Processed && isRecurrentTime {
-				go HandleWeatherForecastSubscription(b, dbClient, subscriptionService, weatherAPI, dbCfg)
+				go handleWeatherForecastSubscription(b, subscriptionService, weatherAPI)
 			}
 		}
 	}
@@ -101,7 +97,7 @@ func handleTimeMessageForSubscription(c tele.Context, dbClient db.DatabaseAccess
 		"event.time": c.Message().Text,
 	}
 
-	if err = UpdateSubscription(dbClient, c.Sender().ID, timeUpdate); err != nil {
+	if err = UpdateSubscription(dbClient, c.Sender().ID, timeUpdate, &cfg.Db); err != nil {
 		return c.Send("Ahh... It didn't work... Check input time and try again")
 	}
 
@@ -130,7 +126,7 @@ func handleLocationPinMessage(
 			"processed":          true,
 		}
 
-		if err = UpdateSubscription(dbClient, c.Sender().ID, locUpdate); err != nil {
+		if err = UpdateSubscription(dbClient, c.Sender().ID, locUpdate, &cfg.Db); err != nil {
 			return c.Send("Failed to subscribe :( Try again later")
 		}
 
@@ -143,14 +139,10 @@ func handleLocationPinMessage(
 		return c.Send("Something went wrong :( Try again")
 	}
 
-	log.Info().Msg("GOT WEATHER FORECAST")
-
-	if err = weatherForecast.StoreWeatherForecastForUser(dbClient, &cfg.Db,
+	if err = weatherForecast.StoreUpdateWeatherForecast(dbClient, &cfg.Db,
 		subscriptionService.UserID); err != nil {
 		return c.Send("Something went wrong :( Try again")
 	}
-
-	log.Info().Msg("STORED WEATHER FORECAST")
 
 	return c.Send("Weather forecast is ready for you, just click date button in menu", menu)
 }
