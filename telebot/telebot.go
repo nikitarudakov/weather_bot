@@ -27,9 +27,10 @@ func InitTelegramBot(cfg *config.Config, dbClient db.DatabaseAccessor) {
 
 	weatherAPI := weatherapi.NewWeatherAPIService(&cfg.WeatherAPI)
 
-	// Set goroutine to check for incoming subscriptions
+	// set goroutine to check for incoming subscriptions
+	// and send weather forecast at a set recurring time
 	ticker := time.NewTicker(1 * time.Minute)
-	go RecurrentWeatherForecast(b, ticker, dbClient, &cfg.Db, weatherAPI)
+	go recurrentWeatherForecast(b, ticker, dbClient, weatherAPI)
 
 	// create menu with dates starting today and ending on the day 7 days ahead
 	menuDateBtnSlice := getMenuDateBtnSlice()
@@ -69,12 +70,13 @@ func InitTelegramBot(cfg *config.Config, dbClient db.DatabaseAccessor) {
 
 	// handles event triggered when day btn is pressed on menu
 	for dtBtnIndex := 1; dtBtnIndex < 8; dtBtnIndex++ {
+		dtBtnIndex := dtBtnIndex
 		b.Handle(&menuDateBtnSlice[dtBtnIndex], func(context tele.Context) error {
 			return handleDateBtn(context, dbClient, cfg, weatherAPI, dtBtnIndex)
 		})
 	}
 
-	b.Start()
-
 	log.Info().Msg("Telegram bot is running ...")
+
+	b.Start()
 }
