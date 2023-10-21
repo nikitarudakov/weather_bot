@@ -3,10 +3,36 @@ package weatherapi
 import (
 	"fmt"
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
+	"git.foxminded.ua/foxstudent106092/weather-bot/db"
 	"git.foxminded.ua/foxstudent106092/weather-bot/logger"
 	"git.foxminded.ua/foxstudent106092/weather-bot/utils/geoutils"
 	"testing"
 )
+
+func TestStoreWeatherForecastForUser(t *testing.T) {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		t.Logf("Error parsing config %s", err)
+	}
+
+	dbClient, _ := db.NewDatabaseClient(&cfg.Db)
+
+	var userID int64 = 12345
+
+	latStr := geoutils.FormatCoordinateToString(50.447731)
+	lonStr := geoutils.FormatCoordinateToString(30.542721)
+
+	weatherAPI := NewWeatherAPIService(&cfg.WeatherAPI)
+
+	weatherForecastAtLocation, err := weatherAPI.GetWeatherForecast(latStr, lonStr)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if err = weatherForecastAtLocation.StoreUpdateWeatherForecast(dbClient, &cfg.Db, userID); err != nil {
+		t.Error(err)
+	}
+}
 
 func TestWeatherAPI(t *testing.T) {
 	cfg, err := config.GetConfig()
@@ -35,7 +61,7 @@ func TestWeatherAPI(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
 
-			weatherAPI := NewWeatherService(&cfg.WeatherAPI)
+			weatherAPI := NewWeatherAPIService(&cfg.WeatherAPI)
 
 			weatherForecastAtLocation, err := weatherAPI.GetWeatherForecast(latStr, lonStr)
 			if err != nil {
