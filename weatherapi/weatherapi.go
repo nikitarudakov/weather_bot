@@ -2,10 +2,10 @@ package weatherapi
 
 import (
 	"encoding/json"
-	"fmt"
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
 	"git.foxminded.ua/foxstudent106092/weather-bot/db"
 	"github.com/rs/zerolog/log"
+	"go.mongodb.org/mongo-driver/bson"
 	"io"
 	"net/http"
 )
@@ -31,20 +31,16 @@ type DailyWeather struct {
 	Weather []Weather `json:"weather"`
 }
 
-// ResponseWeatherAPI represents Weather API response of daily forecasts
-type ResponseWeatherAPI struct {
+// Response represents Weather API response of daily forecasts
+type Response struct {
 	Daily []DailyWeather `json:"daily"`
 }
 
+// UserWeatherForecast represents forecast being made for user with userID
+// This object is being inserted and stored in db
 type UserWeatherForecast struct {
-	UserID   int64               `bson:"user_id"`
-	Forecast *ResponseWeatherAPI `json:"forecast"`
-}
-
-// WeatherAPI represents the methods for interacting with a weather API
-type WeatherAPI interface {
-	GetWeatherForecast(lat, lon string) (*ResponseWeatherAPI, error)
-	ReadWeatherForecastFromDB(dbClient db.DatabaseAccessor, dbCfg *config.DbCfg, userID int64) (*ResponseWeatherAPI, error)
+	UserID   int64     `bson:"user_id"`
+	Forecast *Response `json:"forecast"`
 }
 
 // WeatherService represents a service that interacts with a weather API
@@ -52,28 +48,10 @@ type WeatherService struct {
 	cfg *config.WeatherAPICfg
 }
 
-func (resp *ResponseWeatherAPI) StoreWeatherForecastForUser(client db.DatabaseAccessor, d *config.DbCfg, userID int64) error {
-	usf := &UserWeatherForecast{
-		UserID:   userID,
-		Forecast: resp,
-	}
-
-	fmt.Printf("%+v\n", usf)
-
-	var forecast UserWeatherForecast
-	err := client.FindUserInDB(userID, d.ForecastCollectionName).Decode(&forecast)
-	if err == nil {
-		return nil
-	}
-
-	fmt.Print(err)
-	fmt.Printf("%+v\n", forecast)
-
-	if err := client.InsertItemToDB(usf, d.ForecastCollectionName); err != nil {
-		return err
-	}
-
-	return nil
+// WeatherAPI represents the methods for interacting with a weather API
+type WeatherAPI interface {
+	GetWeatherForecast(lat, lon string) (*Response, error)
+	ReadWeatherForecastFromDB(dbClient db.DatabaseAccessor, dbCfg *config.DbCfg, userID int64) (*Response, error)
 }
 
 // NewWeatherAPIService initialized new WeatherService instance
@@ -92,7 +70,7 @@ func (wa *WeatherService) getAPIUrl(lat, lon string) string {
 }
 
 // GetWeatherForecast fetches API and returns Response - which is weather forecast
-func (wa *WeatherService) GetWeatherForecast(lat, lon string) (*ResponseWeatherAPI, error) {
+func (wa *WeatherService) GetWeatherForecast(lat, lon string) (*Response, error) {
 	// Get API url for location coords lat/lon
 	apiURL := wa.getAPIUrl(lat, lon)
 
@@ -109,7 +87,7 @@ func (wa *WeatherService) GetWeatherForecast(lat, lon string) (*ResponseWeatherA
 		return nil, err
 	}
 
-	weatherResp := ResponseWeatherAPI{}
+	weatherResp := Response{}
 	if err = json.Unmarshal(body, &weatherResp); err != nil {
 		log.Error().Str("service", "json.Unmarshal").Err(err).Send()
 		return nil, err
@@ -118,15 +96,43 @@ func (wa *WeatherService) GetWeatherForecast(lat, lon string) (*ResponseWeatherA
 	return &weatherResp, nil
 }
 
+// ReadWeatherForecastFromDB find user's with userID weather forecast item
+// and decodes it to *UserWeatherForecast
 func (wa *WeatherService) ReadWeatherForecastFromDB(
 	dbClient db.DatabaseAccessor,
 	dbCfg *config.DbCfg, userID int64,
-) (*ResponseWeatherAPI, error) {
-
-	var forecast *UserWeatherForecast
+) (*Response, error) {
+	var forecast UserWeatherForecast
 	if err := dbClient.FindUserInDB(userID, dbCfg.ForecastCollectionName).Decode(&forecast); err != nil {
 		return nil, err
 	}
 
 	return forecast.Forecast, nil
+}
+
+// StoreUpdateWeatherForecast stores weather forecast for user with id but checks first
+// weather user already has weather forecast stored, in that case function updates
+// forecast for a new one
+func (resp *Response) StoreUpdateWeatherForecast(client db.DatabaseAccessor, d *config.DbCfg, id int64) error {
+	usf := &UserWeatherForecast{
+		UserID:   id,
+		Forecast: resp,
+	}
+
+	var forecast UserWeatherForecast
+	if err := client.FindUserInDB(id, d.ForecastCollectionName).Decode(&forecast); err == nil {
+		update := bson.M{"$set": bson.M{
+			"forecast": usf.Forecast,
+		}}
+
+		if err = client.UpdateItemInDB(id, update, d.ForecastCollectionName); err != nil {
+			return err
+		}
+	}
+
+	if err := client.InsertItemToDB(usf, d.ForecastCollectionName); err != nil {
+		return err
+	}
+
+	return nil
 }
