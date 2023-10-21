@@ -1,73 +1,59 @@
 package db
 
 import (
-	"fmt"
 	"git.foxminded.ua/foxstudent106092/weather-bot/config"
-	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/bson"
 	"testing"
-	"time"
 )
 
-func TestDbConnection(t *testing.T) {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		t.Errorf("error parsing config %s", err)
-	}
-
-	_, err = NewDBClient(&cfg.Db)
-	if err != nil {
-		t.Error(err)
-	}
+type NestedItemToInsert struct {
+	Field1 int `bson:"field_one"`
+	Field2 int `bson:"field_two"`
 }
 
-func TestDbClean(t *testing.T) {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		t.Errorf("error parsing config %s", err)
-	}
-
-	dbClient, err := NewDBClient(&cfg.Db)
-	if err != nil {
-		t.Error(err)
-	}
-
-	if err := dbClient.CleanSubscriptionDataFromDB(); err != nil {
-		t.Error(err)
-	}
+type ItemToInsert struct {
+	UserID  int64              `bson:"user_id"`
+	ItemObj NestedItemToInsert `bson:"item_obj"`
 }
 
-func TestDbInsertion(t *testing.T) {
+func TestDbCRUDFunctions(t *testing.T) {
 	cfg, err := config.GetConfig()
 	if err != nil {
-		t.Fatalf("error parsing config %s", err)
+		t.Errorf("error initalizing config %s", err)
 	}
 
-	dbClient, err := NewDBClient(&cfg.Db)
+	dbClient, err := NewDatabaseClient(&cfg.Db)
 	if err != nil {
-		t.Fatal(err)
+		t.Errorf("error connecting client to db server %s", err)
 	}
 
-	doc := &SubscriptionData{
-		Timestamp: time.Now().Unix(),
-		SenderID:  123,
-		MessageID: 123,
-		ChatID:    123,
-		Status:    1,
+	var itemToInsert = ItemToInsert{
+		UserID:  123456,
+		ItemObj: NestedItemToInsert{5, 10},
 	}
 
-	if err := dbClient.InsertSubscriptionDataToDB(doc); err != nil {
-		t.Error(err)
-	}
+	t.Run("CREATE", func(t *testing.T) {
+		if err = dbClient.InsertItemToDB(itemToInsert, cfg.Db.ForecastCollectionName); err != nil {
+			t.Errorf("error inserting item to db %s", err)
+		}
+	})
 
-	subscriptionData, err := dbClient.FindSubscriptionDataInDB(doc.SenderID)
-	if err != nil {
-		t.Error(err)
-	}
+	t.Run("READ", func(t *testing.T) {
+		var itemToRead ItemToInsert
+		if err = dbClient.FindUserInDB(itemToInsert.UserID, cfg.Db.ForecastCollectionName).Decode(&itemToRead); err != nil {
+			t.Errorf("error reading item from db %s", err)
+		}
 
-	t.Log(fmt.Sprintf("%+v\n", *subscriptionData))
-	assert.Equal(t, doc, subscriptionData)
+		t.Logf("%+v\n", itemToRead)
+	})
 
-	if err := dbClient.CleanSubscriptionDataFromDB(); err != nil {
-		t.Error(err)
-	}
+	t.Run("UPDATE", func(t *testing.T) {
+		update := bson.M{"$set": bson.M{
+			"item_obj.field_one": 2,
+		}}
+
+		if err = dbClient.UpdateItemInDB(itemToInsert.UserID, update, cfg.Db.ForecastCollectionName); err != nil {
+			t.Errorf("error updating item to db %s", err)
+		}
+	})
 }
