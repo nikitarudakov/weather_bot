@@ -21,7 +21,7 @@ type DatabaseClient struct {
 type DatabaseAccessor interface {
 	InsertItemToDB(interface{}, string) error
 	FindUserInDB(int64, string) *mongo.SingleResult
-	FindItemsInDB(bson.D) (*mongo.Cursor, error)
+	FindItemsInDB(interface{}) (*mongo.Cursor, error)
 	UpdateItemInDB(int64, bson.M, string) error
 	CloseConnectionToDB() error
 }
@@ -99,7 +99,7 @@ func (dc *DatabaseClient) FindUserInDB(userID int64, collectionName string) *mon
 // FindItemsInDB finds all items that matches filter variable
 // and returns *mongo.Cursor that is used to iterate over a stream of documents
 // and can be parsed
-func (dc *DatabaseClient) FindItemsInDB(filter bson.D) (*mongo.Cursor, error) {
+func (dc *DatabaseClient) FindItemsInDB(filter interface{}) (*mongo.Cursor, error) {
 	collection := dc.client.Database(dc.cfg.Name).Collection(dc.cfg.SubsCollectionName)
 
 	cursor, err := collection.Find(context.TODO(), filter)
