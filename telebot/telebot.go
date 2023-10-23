@@ -30,7 +30,7 @@ func InitTelegramBot(cfg *config.Config, dbClient db.DatabaseAccessor) {
 	// set goroutine to check for incoming subscriptions
 	// and send weather forecast at a set recurring time
 	ticker := time.NewTicker(1 * time.Minute)
-	go recurrentWeatherForecast(b, ticker, dbClient, weatherAPI)
+	go runTickerForSubscriptionWeatherForecast(b, ticker, dbClient, weatherAPI)
 
 	// create menu with dates starting today and ending on the day 7 days ahead
 	menuDateBtnSlice := getMenuDateBtnSlice()

@@ -13,20 +13,20 @@ import (
 	"time"
 )
 
-func sendErrorMsgWithBot(b *tele.Bot, subService *SubscriptionService, err error) {
+func sendErrorMsgWithBot(b *tele.Bot, s *Subscription, err error) {
 	log.Error().Err(err).Send()
-	_, err = b.Send(&subService.UserObj, "Something went wrong :( Try again")
+	_, err = b.Send(&tele.User{ID: s.UserID}, "Something went wrong :( Try again")
 	if err != nil {
 		log.Error().Err(err).Send()
 	}
 }
 
-func handleWeatherForecastSubscription(
+func sendSubscriptionWeatherForecast(
 	b *tele.Bot,
-	subService SubscriptionService,
+	s Subscription,
 	weatherAPI weatherapi.WeatherAPI,
 ) {
-	lat, lon := subService.Event.Location.Lat, subService.Event.Location.Lon
+	lat, lon := s.Event.Location.Lat, s.Event.Location.Lon
 
 	latStr, lonStr :=
 		geoutils.FormatCoordinateToString(lat),
@@ -34,7 +34,7 @@ func handleWeatherForecastSubscription(
 
 	weatherForecast, err := weatherAPI.GetWeatherForecast(latStr, lonStr)
 	if err != nil {
-		sendErrorMsgWithBot(b, &subService, err)
+		sendErrorMsgWithBot(b, &s, err)
 	}
 
 	weatherTextMsg, err := weatherForecast.Daily[0].FormatToTextMsg()
@@ -42,29 +42,35 @@ func handleWeatherForecastSubscription(
 		log.Warn().Err(err).Send()
 	}
 
-	_, err = b.Send(&subService.UserObj, weatherTextMsg)
+	_, err = b.Send(&tele.User{ID: s.UserID}, weatherTextMsg)
 	if err != nil {
-		sendErrorMsgWithBot(b, &subService, err)
+		sendErrorMsgWithBot(b, &s, err)
 	}
 }
 
-func recurrentWeatherForecast(
+func handleSubscriptionWeatherForecast(
+	t time.Time,
+	b *tele.Bot,
+	dbClient db.DatabaseAccessor,
+	weatherAPI weatherapi.WeatherAPI) {
+
+	tickerTimeUTCFormatted := t.UTC().Format(timeutils.Layout24H)
+
+	subscriptions := FindProcessedSubscriptionsForTime(dbClient, tickerTimeUTCFormatted)
+
+	for _, s := range subscriptions {
+		go sendSubscriptionWeatherForecast(b, s, weatherAPI)
+	}
+}
+
+func runTickerForSubscriptionWeatherForecast(
 	b *tele.Bot,
 	ticker *time.Ticker,
 	dbClient db.DatabaseAccessor,
 	weatherAPI weatherapi.WeatherAPI) {
 
 	for t := range ticker.C {
-		tickerTimeUTCFormatted := t.UTC().Format(timeutils.Layout24H)
-
-		subscriptions := FindProcessedSubscriptions(dbClient)
-
-		for _, subscriptionService := range subscriptions {
-			isRecurrentTime := subscriptionService.Event.RecurringTime == tickerTimeUTCFormatted
-			if subscriptionService.Processed && isRecurrentTime {
-				go handleWeatherForecastSubscription(b, subscriptionService, weatherAPI)
-			}
-		}
+		go handleSubscriptionWeatherForecast(t, b, dbClient, weatherAPI)
 	}
 }
 
@@ -75,7 +81,7 @@ Just send <i>location pin</i> to Weather bot and get accurate forecast for up to
 }
 
 func handleSubscriptionCmd(c tele.Context, dbClient db.DatabaseAccessor, cfg *config.DbCfg) error {
-	if err := RequestSubscription(dbClient, cfg, c.Sender().ID, *c.Sender()); err != nil {
+	if err := RequestSubscription(dbClient, cfg, c.Sender().ID); err != nil {
 		return c.Send(`Something went wrong :( Try again later'`)
 	}
 
@@ -83,8 +89,8 @@ func handleSubscriptionCmd(c tele.Context, dbClient db.DatabaseAccessor, cfg *co
 }
 
 func handleTimeMessageForSubscription(c tele.Context, dbClient db.DatabaseAccessor, cfg *config.Config) error {
-	subscriptionService, err := CheckSubscriptionExist(dbClient, &cfg.Db, c.Sender().ID)
-	if err != nil || subscriptionService.Processed {
+	subscription, err := CheckSubscriptionExist(dbClient, &cfg.Db, c.Sender().ID)
+	if err != nil || subscription.Event.Processed {
 		return nil
 	}
 
@@ -118,19 +124,24 @@ func handleLocationPinMessage(
 		geoutils.FormatCoordinateToString(lat),
 		geoutils.FormatCoordinateToString(lon)
 
-	subscriptionService, err := CheckSubscriptionExist(dbClient, &cfg.Db, c.Sender().ID)
-	if err == nil && !subscriptionService.Processed && subscriptionService.Event.RecurringTime != "" {
-		locUpdate := bson.M{
-			"event.location.lat": lat,
-			"event.location.lon": lon,
-			"processed":          true,
-		}
+	subscription, err := CheckSubscriptionExist(dbClient, &cfg.Db, c.Sender().ID)
 
-		if err = UpdateSubscription(dbClient, c.Sender().ID, locUpdate, &cfg.Db); err != nil {
-			return c.Send("Failed to subscribe :( Try again later")
-		}
+	if err == nil && subscription != nil {
+		isSubscriptionValid := !subscription.Event.Processed && subscription.Event.RecurringTime != ""
 
-		return c.Send("Subscription's active now!")
+		if isSubscriptionValid {
+			locUpdate := bson.M{
+				"event.location.lat": lat,
+				"event.location.lon": lon,
+				"event.processed":    true,
+			}
+
+			if err = UpdateSubscription(dbClient, c.Sender().ID, locUpdate, &cfg.Db); err != nil {
+				return c.Send("Failed to subscribe :( Try again later")
+			}
+
+			return c.Send("Subscription's active now!")
+		}
 	}
 
 	weatherForecast, err := weatherAPI.GetWeatherForecast(latStr, lonStr)
@@ -139,8 +150,7 @@ func handleLocationPinMessage(
 		return c.Send("Something went wrong :( Try again")
 	}
 
-	if err = weatherForecast.StoreUpdateWeatherForecast(dbClient, &cfg.Db,
-		subscriptionService.UserID); err != nil {
+	if err = weatherForecast.StoreUpdateWeatherForecast(dbClient, &cfg.Db, c.Sender().ID); err != nil {
 		return c.Send("Something went wrong :( Try again")
 	}
 
