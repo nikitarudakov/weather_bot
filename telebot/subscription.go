@@ -6,7 +6,6 @@ import (
 	"git.foxminded.ua/foxstudent106092/weather-bot/db"
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
-	tele "gopkg.in/telebot.v3"
 )
 
 // Location represents coordinates of location pin
@@ -19,22 +18,24 @@ type Location struct {
 type SubscriptionEvent struct {
 	RecurringTime string   `bson:"time"`
 	Location      Location `bson:"location"`
+	Processed     bool     `bson:"processed"`
 }
 
-// SubscriptionService stores userID and subscription event
-type SubscriptionService struct {
-	UserID    int64             `bson:"user_id"`
-	UserObj   tele.User         `bson:"user"`
-	Event     SubscriptionEvent `bson:"event"`
-	Processed bool              `bson:"processed"`
+// Subscription stores data about user and its Event object
+type Subscription struct {
+	UserID int64             `bson:"user_id"`
+	Event  SubscriptionEvent `bson:"event"`
 }
 
-// FindProcessedSubscriptions searches for all subscription in db that
+// FindProcessedSubscriptionsForTime searches for all subscription in db that
 // has been processed and being active
-func FindProcessedSubscriptions(dbClient db.DatabaseAccessor) []SubscriptionService {
-	filter := bson.D{{"processed", true}}
+func FindProcessedSubscriptionsForTime(dbClient db.DatabaseAccessor, time string) []Subscription {
+	filter := bson.M{
+		"event.time":      time,
+		"event.processed": true,
+	}
 
-	var results []SubscriptionService
+	var results []Subscription
 	cursor, err := dbClient.FindItemsInDB(filter)
 	if err = cursor.All(context.TODO(), &results); err != nil {
 		log.Warn().Err(err).Send()
@@ -46,35 +47,32 @@ func FindProcessedSubscriptions(dbClient db.DatabaseAccessor) []SubscriptionServ
 
 // CheckSubscriptionExist checks weather subscription item
 // of user with userID is currently present in db
-func CheckSubscriptionExist(dbClient db.DatabaseAccessor, dbCfg *config.DbCfg, userID int64) (*SubscriptionService, error) {
-	var subService SubscriptionService
-	if err := dbClient.FindUserInDB(userID, dbCfg.SubsCollectionName).Decode(&subService); err != nil {
+func CheckSubscriptionExist(dbClient db.DatabaseAccessor, dbCfg *config.DbCfg, userID int64) (*Subscription, error) {
+	var subscription Subscription
+	if err := dbClient.FindUserInDB(userID, dbCfg.SubsCollectionName).Decode(&subscription); err != nil {
 		return nil, err
 	}
 
-	return &subService, nil
+	return &subscription, nil
 }
 
 // RequestSubscription inserts initial subscription item for userID unless such item is already present in db,
 // in that case it updates that item with new SubscriptionEvent and processed status
-func RequestSubscription(dbClient db.DatabaseAccessor, dbCfg *config.DbCfg, userID int64, userOBJ tele.User) error {
-	subscriptionService, err := CheckSubscriptionExist(dbClient, dbCfg, userID)
-	if err == nil && !subscriptionService.Processed {
+func RequestSubscription(dbClient db.DatabaseAccessor, dbCfg *config.DbCfg, userID int64) error {
+	subscription, err := CheckSubscriptionExist(dbClient, dbCfg, userID)
+	if err == nil && !subscription.Event.Processed {
 		return nil
 	}
 
-	subService := &SubscriptionService{
-		UserID:    userID,
-		UserObj:   userOBJ,
-		Event:     SubscriptionEvent{},
-		Processed: false,
+	s := &Subscription{
+		UserID: userID,
+		Event:  SubscriptionEvent{Processed: false},
 	}
 
-	if err == nil && subscriptionService.Processed {
+	if err == nil && subscription.Event.Processed {
 		update := bson.M{
 			"$set": bson.M{
-				"event":     SubscriptionEvent{},
-				"processed": false,
+				"event.processed": false,
 			},
 		}
 
@@ -85,7 +83,7 @@ func RequestSubscription(dbClient db.DatabaseAccessor, dbCfg *config.DbCfg, user
 		return nil
 	}
 
-	if err = dbClient.InsertItemToDB(subService, dbCfg.SubsCollectionName); err != nil {
+	if err = dbClient.InsertItemToDB(s, dbCfg.SubsCollectionName); err != nil {
 		return err
 	}
 
