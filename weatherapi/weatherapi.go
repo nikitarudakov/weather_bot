@@ -120,7 +120,8 @@ func (resp *Response) StoreUpdateWeatherForecast(client db.DatabaseAccessor, d *
 	}
 
 	var forecast UserWeatherForecast
-	if err := client.FindUserInDB(id, d.ForecastCollectionName).Decode(&forecast); err == nil {
+	err := client.FindUserInDB(id, d.ForecastCollectionName).Decode(&forecast)
+	if err == nil {
 		update := bson.M{"$set": bson.M{
 			"forecast": usf.Forecast,
 		}}
@@ -128,9 +129,13 @@ func (resp *Response) StoreUpdateWeatherForecast(client db.DatabaseAccessor, d *
 		if err = client.UpdateItemInDB(id, update, d.ForecastCollectionName); err != nil {
 			return err
 		}
+
+		return nil
 	}
 
-	if err := client.InsertItemToDB(usf, d.ForecastCollectionName); err != nil {
+	log.Warn().Err(err).Send()
+
+	if err = client.InsertItemToDB(usf, d.ForecastCollectionName); err != nil {
 		return err
 	}
 
