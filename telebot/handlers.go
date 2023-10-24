@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
 	tele "gopkg.in/telebot.v3"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -82,6 +83,7 @@ Just send <i>location pin</i> to Weather bot and get accurate forecast for up to
 
 func handleSubscriptionCmd(c tele.Context, dbClient db.DatabaseAccessor, cfg *config.DbCfg) error {
 	if err := RequestSubscription(dbClient, cfg, c.Sender().ID); err != nil {
+		log.Error().Str("user_id", strconv.FormatInt(c.Sender().ID, 10)).Err(err).Send()
 		return c.Send(`Something went wrong :( Try again later'`)
 	}
 
@@ -137,6 +139,7 @@ func handleLocationPinMessage(
 			}
 
 			if err = UpdateSubscription(dbClient, c.Sender().ID, locUpdate, &cfg.Db); err != nil {
+				log.Error().Str("user_id", strconv.FormatInt(c.Sender().ID, 10)).Err(err).Send()
 				return c.Send("Failed to subscribe :( Try again later")
 			}
 
@@ -146,11 +149,12 @@ func handleLocationPinMessage(
 
 	weatherForecast, err := weatherAPI.GetWeatherForecast(latStr, lonStr)
 	if err != nil {
-		log.Error().Err(err).Send()
+		log.Error().Str("user_id", strconv.FormatInt(c.Sender().ID, 10)).Err(err).Send()
 		return c.Send("Something went wrong :( Try again")
 	}
 
 	if err = weatherForecast.StoreUpdateWeatherForecast(dbClient, &cfg.Db, c.Sender().ID); err != nil {
+		log.Error().Str("user_id", strconv.FormatInt(c.Sender().ID, 10)).Err(err).Send()
 		return c.Send("Something went wrong :( Try again")
 	}
 
@@ -160,6 +164,7 @@ func handleLocationPinMessage(
 func handleDateWholePeriodBtn(c tele.Context, dbClient db.DatabaseAccessor, cfg *config.Config, weatherAPI weatherapi.WeatherAPI) error {
 	weatherForecast, err := weatherAPI.ReadWeatherForecastFromDB(dbClient, &cfg.Db, c.Sender().ID)
 	if err != nil {
+		log.Warn().Str("user_id", strconv.FormatInt(c.Sender().ID, 10)).Err(err).Send()
 		return c.Send("Data is unavailable!\nSend location pin")
 	}
 
@@ -182,6 +187,7 @@ func handleDateBtn(c tele.Context, dbClient db.DatabaseAccessor, cfg *config.Con
 
 	weatherForecast, err := weatherAPI.ReadWeatherForecastFromDB(dbClient, &cfg.Db, c.Sender().ID)
 	if err != nil {
+		log.Warn().Str("user_id", strconv.FormatInt(c.Sender().ID, 10)).Err(err).Send()
 		return c.Send("Data is unavailable!\nSend location pin")
 	}
 
